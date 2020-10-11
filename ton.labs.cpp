@@ -22,11 +22,12 @@
  * Output: Infinite
  */
 
+#include <algorithm>
 #include <iostream>
 #include <vector>
 #include <stack>
-#include <map>
 #include <set>
+#include <map>
 
 using namespace std;
 
@@ -36,7 +37,6 @@ using namespace std;
  * @return Подстрока в соответствии с заданием.
  */
 string getMaxCorrectString (const string&);
-
 
 /**
  * @brief Проверяет соответствие открывающей и закрывающей скобок друг другу.
@@ -54,51 +54,93 @@ bool areBracketsMatched (char openBracket, char closeBracket);
 bool isBracketOpenedLexeme (const string& lexeme);
 
 /**
- * @brief Раскручивает стек: переносит из каждого его уровня корректные лексемы в набор корректных лексем.
+ * @brief Раскручивает стек лексем: переносит из каждого его уровня корректные лексемы в набор корректных лексем.
  * @param lexemeStack стек для раскрутки.
  * @param correctLexemes набор лексем, куда перемещаются лексемы из стека.
- * @details По завершении работы функции стек станет пустым.
+ * @details По завершении работы функции стек будет пустым.
  */
 void moveLexemesFromStackToSet(stack<string>& lexemeStack, set<string>& correctLexemes);
 
 int main()
 {
+    // Тестовые пары: входная строка => ожидаемый результат
+    vector<pair<string,string>> tests {
+        {"",            "Infinite"},
+        {"a",           "Infinite" },
+        {"}](){",       {"(){}"}},
+        {"}(){",        {"Infinite"}},
+        {"sh(dh)}",     "sh(dh)"},
+        {"sh(dh)",      "Infinite"},
+        {"]h({hdb}b)[", "Infinite"}};
+
+    for_each(cbegin(tests), cend(tests), [](auto& testPair) {
+        auto result = getMaxCorrectString(testPair.first);
+        cout << "\"" << testPair.first << "\" => " << result << (result == testPair.second? " (OK)" : " (Fault)") << endl;
+    });
+
+/*
     string s;
     cin >> s;
     cout << getMaxCorrectString(s) << endl;
-
+*/
     return 0;
 }
 
 string getMaxCorrectString(const string& s) {
-    stack<string> lexemeStack;    // Стэк лексем.
-    string currentLexeme;         // Здесь будет посимвольно "набираться" текущая лексема.
-    set<string> correctLexemes;   // Найденные правильные, изолированные друг от друга лексемы
+    // Алгоритм разбирает строку на лексемы, используя стек для реализации вложенности.
+    // Текущая лексема, которая разбирается в данный момент - находится на вершине стека.
+    // Стек инициализируется начальной, "корневой", по-умолчанию - пустой лексемой.
+    stack<string> lexemeStack;
+    lexemeStack.push("");
 
-    for (auto sym: s)
-        switch (sym) {
-            case '(': case '{': case '[':           // Начинается новая вложенная лексема
-                lexemeStack.push(currentLexeme);    // Текущую - сохранить в стек.
-                currentLexeme = sym;
-                break;
+    set<string> correctLexemes;   // Найденные корректные, изолированные друг от друга в строке лексемы
 
-            case ')': case '}': case ']':           // Завершение лексемы
-                if (isBracketOpenedLexeme(currentLexeme) && areBracketsMatched(currentLexeme[0], sym)) {
-                    currentLexeme += sym;
-                    currentLexeme = lexemeStack.top().append(currentLexeme);
-                    lexemeStack.pop();
+    // Двойным прогоном имитируется конкатенация строки, чтобы обнаружить сопоставления скобок из хвоста в начало.
+    for (int i = 0; i < 2; ++i) {
+        for (auto sym: s)
+            switch (sym) {
+                case '(': case '{': case '[':         // Начинается новая, вложенная лексема.
+                    lexemeStack.push(string{sym}); // Поместить её на вершину стека - теперь работа идёт с нею.
                     break;
-                };
-                moveLexemesFromStackToSet(lexemeStack, correctLexemes);
-                break;
 
-            default:
-                currentLexeme += sym;
-                break;
-        }
+                case ')': case '}': case ']':         // Завершение лексемы.
+                    if (isBracketOpenedLexeme(lexemeStack.top()) &&
+                        areBracketsMatched(lexemeStack.top()[0], sym)) {
+                        // Это скобочная лексема и она корректно закрыта парной, закрывающей скобкой.
+                        lexemeStack.top() += sym;           // Завершить текущую лексему.
+                        // Убрать лексему с вершины стека и прикрепить её к лексеме ниже уровнем.
+                        string tmp = lexemeStack.top(); lexemeStack.pop();
+                        lexemeStack.top().append(tmp);
+                    }
+                    else {  // Несмотря на закрывающую скобку - лексема корректно не закрыта.
+                        moveLexemesFromStackToSet(lexemeStack, correctLexemes); // Сохранить накопленные лексемы.
+                        lexemeStack.push("");                              // Подготовить стек для дальнейшей работы.
+                    }
+                    break;
 
+                default:    // Все символы кроме скобок - просто принимаются, как заполнители текущей лексемы.
+                    lexemeStack.top() += sym;
+                    break;
+            }
+    }
+
+    // После обработки строки - сохранить накопленные лексемы.
     moveLexemesFromStackToSet(lexemeStack, correctLexemes);
-    return "Infinite";
+
+    // Найти максимальную корректную лексему.
+    auto maxStr = max_element(cbegin(correctLexemes),
+                              cend(correctLexemes),
+                              [](auto& fst, auto& snd) { return fst.length() < snd.length();});
+
+    // Обработка "увязки" лексем через границу конца/начала строки с образованием бесконечно длинной корректной лексемы:
+    // Если корректная лексема бесконечная, то две строки должны давать одинаковый вклад.
+    auto substr = maxStr->substr(0, maxStr->length() / 2);
+    // Для конкатенации "в хвост" подстрока должна находиться в конце исходной строки
+    auto substrIndex = s.rfind(substr);
+    if (substrIndex == s.length() - substr.length()) return "Infinite";
+
+    // Условия для Infinite не удовлетворяются - вернуть найденную строку.
+    return *maxStr;
 }
 
 bool areBracketsMatched(char openBracket, char closeBracket) {
@@ -117,5 +159,14 @@ bool isBracketOpenedLexeme(const string& lexeme)
 }
 
 void moveLexemesFromStackToSet(stack<string>& lexemeStack, set<string>& correctLexemes) {
-
+    // На всех уровнях стека, кроме самого нижнего будут находиться "вложенные" лексемы, начинающаиеся со скобки.
+    // Раз они не прикрепились к лексемам нижних уровней, значит с ними что-то не в порядке: скобки в них не закрыты.
+    // В таком случае, корректная лексема внутри них может быть только начиная с 1 символа: открывающую скобку - не
+    // учитывать.
+    // "Корневая" лексема (самого нижнего уровня) - переписывается целиком.
+    for (; !lexemeStack.empty(); lexemeStack.pop())
+        if (lexemeStack.size() > 1)
+            correctLexemes.insert(lexemeStack.top().substr(1));
+        else
+            correctLexemes.insert(lexemeStack.top());
 }
