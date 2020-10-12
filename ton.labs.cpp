@@ -65,7 +65,7 @@ int main()
 {
     // Тестовые пары: входная строка => ожидаемый результат
     vector<pair<string,string>> tests {
-        {"",            "Infinite"},
+        {"",            ""},
         {"a",           "Infinite" },
         {"}](){",       {"(){}"}},
         {"}(){",        {"Infinite"}},
@@ -75,7 +75,7 @@ int main()
 
     for_each(cbegin(tests), cend(tests), [](auto& testPair) {
         auto result = getMaxCorrectString(testPair.first);
-        cout << "\"" << testPair.first << "\" => " << result << (result == testPair.second? " (OK)" : " (Fault)") << endl;
+        cout << "\"" << testPair.first << "\" => \"" << result << "\"" << (result == testPair.second? " (OK)" : " (Fault)") << endl;
     });
 
 /*
@@ -87,6 +87,8 @@ int main()
 }
 
 string getMaxCorrectString(const string& s) {
+    if (s.empty()) return s;   // Для пустой строки ответ тривиален.
+
     // Алгоритм разбирает строку на лексемы, используя стек для реализации вложенности.
     // Текущая лексема, которая разбирается в данный момент - находится на вершине стека.
     // Стек инициализируется начальной, "корневой", по-умолчанию - пустой лексемой.
